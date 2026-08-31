@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Forward Linkage Analytics | Suchitwa Mission</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <style>
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.2); border-radius: 10px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.5); }
+    
+    body { background-color: #040814; color: #e2e8f0; overflow-x: hidden; }
+
+    /* HARDWARE ACCELERATED GLASSMORPHISM */
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.4);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+      transform: translateZ(0);
+      contain: paint;
+    }
+    
+    .glass-input {
+      background: rgba(15, 23, 42, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #f8fafc;
+    }
+    
+    .glass-input:focus { border-color: rgba(99, 102, 241, 0.5); box-shadow: 0 0 15px rgba(99, 102, 241, 0.2); }
+
+    .text-glow-blue { text-shadow: 0 0 15px rgba(56, 189, 248, 0.4); }
+    .text-glow-green { text-shadow: 0 0 15px rgba(52, 211, 153, 0.4); }
+    .text-glow-red { text-shadow: 0 0 15px rgba(244, 63, 94, 0.4); }
+
+    @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    .animate-fade-up { animation: fadeInUp 0.5s ease-out forwards; opacity: 0; }
+    
+    .ambient-orb { 
+      position: fixed; border-radius: 50%; filter: blur(100px); 
+      z-index: -1; opacity: 0.3; pointer-events: none;
+      transform: translateZ(0); will-change: transform;
+    }
+  </style>
+</head>
+<body class="font-sans antialiased min-h-screen relative">
+
+  <div class="ambient-orb bg-indigo-900 w-[500px] h-[500px] top-[-10%] left-[-10%]"></div>
+  <div class="ambient-orb bg-sky-900 w-[400px] h-[400px] bottom-[10%] right-[-5%]"></div>
+  <div class="ambient-orb bg-emerald-900/20 w-[300px] h-[300px] top-[40%] left-[40%]"></div>
+
+  <div id="loadingOverlay" class="fixed inset-0 bg-[#040814]/80 backdrop-blur z-[100] flex flex-col items-center justify-center text-white transition-opacity duration-300">
+    <div class="relative w-20 h-20 flex items-center justify-center">
+      <div class="absolute inset-0 border-4 border-indigo-500/20 rounded-full"></div>
+      <div class="absolute inset-0 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+      <i class="fa-solid fa-satellite-dish text-indigo-400 animate-pulse"></i>
+    </div>
+    <h3 id="overlayTitle" class="mt-6 text-lg font-bold tracking-widest text-indigo-300 uppercase">Loading Analytics...</h3>
+  </div>
+
+  <div id="syncConfirmModal" class="fixed inset-0 z-[200] hidden flex items-center justify-center bg-[#040814]/80 backdrop-blur transition-opacity">
+    <div class="glass-panel p-8 rounded-2xl max-w-md w-full text-center shadow-2xl transform scale-95 transition-transform duration-300" id="syncConfirmContent">
+      <div class="w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-5 bg-sky-500/10 border border-sky-500/30">
+        <i class="fa-solid fa-cloud-arrow-down text-2xl text-sky-400"></i>
+      </div>
+      <h3 class="text-xl font-bold text-white mb-2 tracking-wide">Sync Master Database</h3>
+      <p class="text-slate-400 text-sm mb-6 leading-relaxed">
+        This will retrieve the latest data from all registered agencies. 
+        <br><br>
+        <span class="text-rose-400 font-semibold">Important:</span> The system is consolidating a large volume of data from all agencies. Please be patient and <strong>do not close or refresh the browser</strong> while syncing to avoid interruptions.
+      </p>
+      <div class="flex gap-4 justify-center">
+        <button onclick="closeModal('syncConfirmModal', 'syncConfirmContent')" class="w-full bg-slate-800 hover:bg-slate-700 text-white font-semibold px-6 py-3 rounded-xl transition-all active:scale-95">Cancel</button>
+        <button onclick="executeManualSync()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-6 py-3 rounded-xl shadow-[0_0_15px_rgba(79,70,229,0.4)] transition-all active:scale-95">Proceed</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="customModal" class="fixed inset-0 z-[200] hidden flex items-center justify-center bg-[#040814]/80 backdrop-blur transition-opacity">
+    <div class="glass-panel p-8 rounded-2xl max-w-sm w-full text-center shadow-2xl" id="modalContent">
+      <div id="modalIconContainer" class="w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-5 bg-emerald-500/10 border border-emerald-500/30">
+        <i id="modalIcon" class="fa-solid fa-check text-2xl text-emerald-400"></i>
+      </div>
+      <h3 id="modalTitle" class="text-xl font-bold text-white mb-2 tracking-wide">Success</h3>
+      <p id="modalMessage" class="text-slate-400 text-sm mb-8 leading-relaxed">Operation completed.</p>
+      <button onclick="closeModal('customModal')" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-6 py-3 rounded-xl transition-all active:scale-95">Continue</button>
+    </div>
+  </div>
+
+  <div id="listModal" class="fixed inset-0 z-[200] hidden flex items-center justify-center bg-[#040814]/80 backdrop-blur transition-opacity">
+    <div class="glass-panel p-6 rounded-2xl max-w-lg w-full shadow-2xl flex flex-col max-h-[80vh] transform scale-95 transition-transform duration-300" id="listModalWrapper">
+      <div class="flex justify-between items-center mb-4">
+        <h3 id="listModalTitle" class="text-lg font-bold text-indigo-300 tracking-wide uppercase">Agencies</h3>
+        <button onclick="closeModal('listModal', 'listModalWrapper')" class="text-slate-400 hover:text-white text-xl"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div id="listModalContent" class="overflow-y-auto custom-scrollbar pr-2 flex-grow"></div>
+    </div>
+  </div>
+
+  <header class="glass-panel sticky top-0 z-40 border-b-0 border-t-0 border-l-0 border-r-0 border-b border-white/5">
+    <div class="w-full mx-auto px-4 sm:px-8 py-4 flex flex-wrap justify-between items-center gap-4">
+      
+      <div class="flex items-center gap-4">
+        <img id="brandingLogo" 
+             src="SM LOGO.png" 
+             alt="Suchitwa Mission Logo" 
+             class="h-12 sm:h-16 w-auto object-contain flex-shrink-0 bg-white rounded-md p-1.5 shadow-[0_0_15px_rgba(255,255,255,0.1)]" 
+             onerror="this.src='https://gokul-ga.github.io/SM-Forward-Linkage-Dashboard/SM%20LOGO.png'" />
+        
+        <div>
+          <h1 class="text-lg sm:text-xl font-extrabold tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400">SUCHITWA MISSION - FORWARD LINKAGE AGENCY DASHBOARD</h1>
+          <p class="text-[10px] uppercase tracking-[0.2em] text-indigo-400 mt-0.5">An agency-focused portal designed for real-time tracking, reporting, and monitoring of statewide waste handling workflows.</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-4">
+        <span id="syncTime" class="text-[10px] uppercase tracking-wider bg-slate-800/50 px-3 py-1.5 rounded-lg border border-white/5 text-slate-300 hidden sm:block">Waiting...</span>
+        <button onclick="triggerManualSync()" class="bg-white/5 hover:bg-white/10 border border-white/10 text-white font-medium px-5 py-2 rounded-xl transition-all flex items-center gap-2 text-xs active:scale-95">
+          <i class="fa-solid fa-rotate text-indigo-400" id="refreshIcon"></i> Sync Data
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="w-full mx-auto px-4 sm:px-8 py-8 space-y-8">
+    
+    <div class="glass-panel p-6 rounded-2xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 animate-fade-up">
+      <div>
+        <label class="text-[10px] font-bold text-indigo-300 uppercase tracking-widest flex items-center gap-2 mb-2"><i class="fa-solid fa-building text-slate-500"></i> Agency</label>
+        <select id="filterAgency" onchange="applyFilters()" class="w-full glass-input rounded-xl text-sm p-3 outline-none cursor-pointer"><option value="ALL">All Agencies</option></select>
+      </div>
+      <div>
+        <label class="text-[10px] font-bold text-indigo-300 uppercase tracking-widest flex items-center gap-2 mb-2"><i class="fa-solid fa-map-location-dot text-slate-500"></i> District</label>
+        <select id="filterDistrict" onchange="applyFilters()" class="w-full glass-input rounded-xl text-sm p-3 outline-none cursor-pointer"><option value="ALL">All 14 Districts</option></select>
+      </div>
+      <div>
+        <label class="text-[10px] font-bold text-indigo-300 uppercase tracking-widest flex items-center gap-2 mb-2"><i class="fa-regular fa-calendar text-slate-500"></i> Month</label>
+        <select id="filterMonth" onchange="applyFilters()" class="w-full glass-input rounded-xl text-sm p-3 outline-none cursor-pointer"><option value="ALL">All 2026 Months</option></select>
+      </div>
+      <div>
+        <label class="text-[10px] font-bold text-indigo-300 uppercase tracking-widest flex items-center gap-2 mb-2"><i class="fa-solid fa-landmark text-slate-500"></i> LSGI Type</label>
+        <select id="filterType" onchange="applyFilters()" class="w-full glass-input rounded-xl text-sm p-3 outline-none cursor-pointer"><option value="ALL">All Types</option></select>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div class="glass-panel p-6 rounded-2xl relative overflow-hidden animate-fade-up">
+        <div class="absolute -right-6 -top-6 w-32 h-32 bg-sky-500/10 rounded-full blur-2xl"></div>
+        <div class="flex justify-between items-start">
+          <div>
+            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Quantity</p>
+            <h3 id="kpiTotalQty" class="text-4xl font-light text-white mt-2 tracking-tight text-glow-blue">0 <span class="text-lg text-slate-500 font-normal">MT</span></h3>
+            <p class="text-xs text-sky-400 mt-2 font-mono tracking-wide bg-sky-500/10 inline-block px-2 py-1 rounded" id="kpiTotalKg">0 Kg</p>
+          </div>
+          <div class="w-12 h-12 rounded-full bg-sky-400/10 flex items-center justify-center border border-sky-400/20"><i class="fa-solid fa-box-open text-sky-400"></i></div>
+        </div>
+      </div>
+      
+      <div class="glass-panel p-6 rounded-2xl relative overflow-hidden animate-fade-up">
+        <div class="absolute -right-6 -top-6 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl"></div>
+        <div class="flex justify-between items-start">
+          <div>
+            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Recyclables</p>
+            <h3 id="kpiRecyclables" class="text-4xl font-light text-white mt-2 tracking-tight text-glow-green">0 <span class="text-lg text-slate-500 font-normal">MT</span></h3>
+            <p class="text-xs text-emerald-400 mt-2 font-mono tracking-wide bg-emerald-500/10 inline-block px-2 py-1 rounded" id="kpiRecyclablesKg">0 Kg</p>
+          </div>
+          <div class="w-12 h-12 rounded-full bg-emerald-400/10 flex items-center justify-center border border-emerald-400/20"><i class="fa-solid fa-recycle text-emerald-400"></i></div>
+        </div>
+      </div>
+      
+      <div class="glass-panel p-6 rounded-2xl relative overflow-hidden animate-fade-up">
+        <div class="absolute -right-6 -top-6 w-32 h-32 bg-rose-500/10 rounded-full blur-2xl"></div>
+        <div class="flex justify-between items-start">
+          <div>
+            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Non-Recyclables <span class="normal-case opacity-50"></span></p>
+            <h3 id="kpiRejects" class="text-4xl font-light text-white mt-2 tracking-tight text-glow-red">0 <span class="text-lg text-slate-500 font-normal">MT</span></h3>
+            <p class="text-xs text-rose-400 mt-2 font-mono tracking-wide bg-rose-500/10 inline-block px-2 py-1 rounded" id="kpiRejectsKg">0 Kg</p>
+          </div>
+          <div class="w-12 h-12 rounded-full bg-rose-400/10 flex items-center justify-center border border-rose-400/20"><i class="fa-solid fa-fire text-rose-400"></i></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-fade-up">
+      
+      <div class="glass-panel p-6 rounded-2xl flex flex-col justify-between">
+        <div class="flex flex-wrap justify-between items-center gap-4 mb-5 border-b border-white/10 pb-4">
+          <div>
+            <h4 class="text-sm font-bold text-indigo-300 uppercase tracking-widest flex items-center gap-2"><i class="fa-solid fa-radar"></i> Submission Tracker</h4>
+            <p class="text-xs text-slate-400 mt-1">Monitor agency reporting compliance by month.</p>
+          </div>
+          <div>
+            <select id="trackerMonth" onchange="updateTracker()" class="glass-input rounded-xl text-xs px-3 py-2 outline-none cursor-pointer">
+              <option value="">Select Month...</option>
+            </select>
+          </div>
+        </div>
+        
+        <div class="grid grid-cols-3 gap-3 text-center">
+          <div onclick="viewTrackerDetails('total')" class="bg-black/20 p-4 rounded-xl border border-white/5 flex flex-col justify-center cursor-pointer hover:bg-white/5 transition-colors">
+            <p class="text-[9px] uppercase tracking-widest text-slate-400 mb-1">Total Agencies <i class="fa-solid fa-arrow-up-right-from-square ml-1 text-[8px]"></i></p>
+            <p class="text-2xl font-light text-white" id="trkTotal">0</p>
+          </div>
+          <div onclick="viewTrackerDetails('submitted')" class="bg-emerald-900/20 p-4 rounded-xl border border-emerald-500/20 cursor-pointer hover:bg-emerald-900/40 transition-colors flex flex-col justify-center">
+            <p class="text-[9px] uppercase tracking-widest text-emerald-400 mb-1">Submitted <i class="fa-solid fa-arrow-up-right-from-square ml-1 text-[8px]"></i></p>
+            <p class="text-2xl font-bold text-emerald-300" id="trkSub">0</p>
+          </div>
+          <div onclick="viewTrackerDetails('pending')" class="bg-rose-900/20 p-4 rounded-xl border border-rose-500/20 cursor-pointer hover:bg-rose-900/40 transition-colors flex flex-col justify-center">
+            <p class="text-[9px] uppercase tracking-widest text-rose-400 mb-1">Pending <i class="fa-solid fa-arrow-up-right-from-square ml-1 text-[8px]"></i></p>
+            <p class="text-2xl font-bold text-rose-300" id="trkPend">0</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="glass-panel p-6 rounded-2xl flex flex-col justify-between">
+        <h4 class="text-sm font-bold text-indigo-300 uppercase tracking-widest mb-2 border-b border-white/10 pb-4">Overall Waste Composition</h4>
+        <div class="relative h-44 mt-4"><canvas id="compChart"></canvas></div>
+      </div>
+
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-fade-up">
+      <div class="glass-panel p-6 rounded-2xl">
+        <h4 class="text-[10px] font-bold text-indigo-300 uppercase tracking-widest mb-5">Top Agencies by Volume (MT)</h4>
+        <div class="relative h-72"><canvas id="agencyChart"></canvas></div>
+      </div>
+      <div class="glass-panel p-6 rounded-2xl">
+        <h4 class="text-[10px] font-bold text-indigo-300 uppercase tracking-widest mb-5">District-wise Waste Lifted (MT)</h4>
+        <div class="relative h-72"><canvas id="districtChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="glass-panel rounded-2xl overflow-hidden animate-fade-up">
+      <div class="px-6 py-4 border-b border-white/5 flex flex-wrap justify-between items-center gap-4 bg-white/[0.02]">
+        <h4 class="text-[10px] font-bold text-indigo-300 uppercase tracking-widest">Data Ledger</h4>
+        <div class="flex items-center gap-4">
+          <div class="flex items-center gap-2">
+            <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Show Rows:</label>
+            <select id="tableLimit" onchange="changeTableLimit()" class="glass-input text-[11px] rounded-lg px-2 py-1 outline-none cursor-pointer">
+              <option value="10">10</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+              <option value="ALL">All</option>
+            </select>
+          </div>
+          <span class="text-[10px] uppercase tracking-widest text-slate-400 bg-black/30 px-3 py-1.5 rounded-lg border border-white/5">Records: <span id="recordCount" class="text-white font-bold">0</span></span>
+        </div>
+      </div>
+      <div class="overflow-x-auto max-h-[500px] custom-scrollbar">
+        <table class="w-full text-left text-xs border-collapse whitespace-nowrap">
+          <thead class="bg-slate-900/80 text-slate-400 uppercase tracking-widest text-[9px] sticky top-0 backdrop-blur-xl z-10">
+            <tr>
+              <th class="p-5 border-b border-white/5 font-bold">Sl.No</th>
+              <th class="p-5 border-b border-white/5 font-bold">Agency Name</th>
+              <th class="p-5 border-b border-white/5 font-bold">Month</th>
+              <th class="p-5 border-b border-white/5 font-bold">District</th>
+              <th class="p-5 border-b border-white/5 font-bold">Local Body</th>
+              <th class="p-5 border-b border-white/5 font-bold text-right text-emerald-400">Recyclable (Kg)</th>
+              <th class="p-5 border-b border-white/5 font-bold text-right text-rose-400">Non-Recyclable (Kg)</th>
+              <th class="p-5 border-b border-white/5 font-bold text-right text-sky-400">Total (Kg)</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody" class="divide-y divide-white/5 text-slate-300"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // ==========================================
+    // !!! PASTE YOUR GOOGLE WEB APP URL HERE !!!
+    // ==========================================
+    const API_URL = "YOUR_WEB_APP_URL_HERE"; 
+
+    Chart.defaults.color = '#64748b';
+    Chart.defaults.font.family = "'Inter', sans-serif";
+    Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(15, 23, 42, 0.9)';
+    Chart.defaults.plugins.tooltip.titleColor = '#fff';
+    Chart.defaults.plugins.tooltip.padding = 10;
+    Chart.defaults.plugins.tooltip.borderColor = 'rgba(255,255,255,0.1)';
+    Chart.defaults.plugins.tooltip.borderWidth = 1;
+
+    let normalizedDataset = [];
+    let currentFilteredData = [];
+    let tableDisplayLimit = 10;
+    let masterAgencyList = []; 
+    
+    let agencyChartInstance = null;
+    let districtChartInstance = null;
+    let compChartInstance = null;
+    
+    let trackerSubList = [];
+    let trackerPendList = [];
+
+    function showModal(title, message, isError = false) {
+      document.getElementById("modalTitle").innerText = title;
+      document.getElementById("modalMessage").innerText = message;
+      const iconContainer = document.getElementById("modalIconContainer");
+      const icon = document.getElementById("modalIcon");
+      if (isError) {
+        iconContainer.className = "w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-5 bg-rose-500/10 border border-rose-500/30";
+        icon.className = "fa-solid fa-triangle-exclamation text-2xl text-rose-400";
+      } else {
+        iconContainer.className = "w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-5 bg-emerald-500/10 border border-emerald-500/30";
+        icon.className = "fa-solid fa-check text-2xl text-emerald-400";
+      }
+      document.getElementById("customModal").classList.remove("hidden");
+      setTimeout(() => document.getElementById("modalContent").classList.remove("scale-95"), 10);
+    }
+
+    function showListModal(title, htmlContent) {
+      document.getElementById("listModalTitle").innerText = title;
+      document.getElementById("listModalContent").innerHTML = htmlContent;
+      document.getElementById("listModal").classList.remove("hidden");
+      setTimeout(() => document.getElementById("listModalWrapper").classList.remove("scale-95"), 10);
+    }
+
+    function closeModal(modalId, contentId) {
+      if(contentId) document.getElementById(contentId).classList.add("scale-95");
+      setTimeout(() => document.getElementById(modalId).classList.add("hidden"), 200);
+    }
+
+    // ----- GITHUB PAGES FETCH LOGIC -----
+    window.onload = async function() {
+      document.getElementById("loadingOverlay").classList.remove("hidden");
+      
+      try {
+        const response = await fetch(API_URL + "?format=json");
+        if (!response.ok) throw new Error("Network response was not ok");
+        
+        const data = await response.json();
+        processRawData(data);
+        
+        document.getElementById("loadingOverlay").classList.add("opacity-0");
+        setTimeout(() => document.getElementById("loadingOverlay").classList.add("hidden"), 300);
+      } catch (err) {
+        document.getElementById("loadingOverlay").classList.add("hidden");
+        showModal("Connection Failed", "Unable to retrieve data. Make sure the API URL is correct. Error: " + err.message, true);
+      }
+    };
+
+    function triggerManualSync() {
+      document.getElementById("syncConfirmModal").classList.remove("hidden");
+      setTimeout(() => document.getElementById("syncConfirmContent").classList.remove("scale-95"), 10);
+    }
+
+    async function executeManualSync() {
+      closeModal('syncConfirmModal', 'syncConfirmContent');
+      document.getElementById("refreshIcon").classList.add("fa-spin");
+      document.getElementById("overlayTitle").innerText = "SYNCING AGENCIES";
+      const loader = document.getElementById("loadingOverlay");
+      loader.classList.remove("hidden", "opacity-0");
+
+      try {
+        // Appending action=refresh triggers the heavy backend sync
+        const response = await fetch(API_URL + "?format=json&action=refresh");
+        if (!response.ok) throw new Error("Network response was not ok");
+        
+        const data = await response.json();
+        processRawData(data);
+        
+        document.getElementById("refreshIcon").classList.remove("fa-spin");
+        loader.classList.add("opacity-0");
+        setTimeout(() => loader.classList.add("hidden"), 300);
+        showModal("Sync Complete", `Successfully imported ${data.count || 0} rows from the Master Database.`);
+      } catch (err) {
+        document.getElementById("refreshIcon").classList.remove("fa-spin");
+        loader.classList.add("opacity-0");
+        setTimeout(() => loader.classList.add("hidden"), 300);
+        showModal("Sync Failed", "Error: " + err.message, true);
+      }
+    }
+
+    function cleanDistrict(raw) {
+      if (!raw) return "Unknown";
+      const d = String(raw).toLowerCase().trim();
+      if (d.includes("trivandr") || d.includes("thiruvanan")) return "Thiruvananthapuram";
+      if (d.includes("mala") || d.includes("malap")) return "Malappuram"; 
+      if (d.includes("alap") || d.includes("alappu")) return "Alappuzha";
+      if (d.includes("pathan")) return "Pathanamthitta";
+      if (d.includes("erana") || d.includes("ernakulam")) return "Ernakulam";
+      if (d.includes("kozhi") || d.includes("calicut")) return "Kozhikode";
+      if (d.includes("palak")) return "Palakkad";
+      if (d.includes("kollam")) return "Kollam";
+      if (d.includes("kottayam")) return "Kottayam";
+      if (d.includes("idukki")) return "Idukki";
+      if (d.includes("thrissur") || d.includes("trichur")) return "Thrissur";
+      if (d.includes("wayanad")) return "Wayanad";
+      if (d.includes("kannur")) return "Kannur";
+      if (d.includes("kasara")) return "Kasaragod";
+      return String(raw).trim();
+    }
+
+    function cleanLsgiType(raw) {
+      if (!raw) return "Others";
+      const t = String(raw).toLowerCase().trim();
+      if (t.includes("grama") || t.includes("panchayat")) return "Gramapanchayat";
+      if (t.includes("muni")) return "Municipality";
+      if (t.includes("corp")) return "Corporation";
+      if (t.includes("block")) return "Block";
+      return "Others";
+    }
+
+    function cleanMonth(raw) {
+      if(!raw) return "Unknown";
+      let mo = String(raw).toUpperCase().trim();
+      if (mo.includes("JAN")) return "JANUARY 2026";
+      if (mo.includes("FEB")) return "FEBRUARY 2026";
+      if (mo.includes("MAR")) return "MARCH 2026";
+      if (mo.includes("APR")) return "APRIL 2026";
+      if (mo.includes("MAY")) return "MAY 2026";
+      if (mo.includes("JUN")) return "JUNE 2026";
+      if (mo.includes("JUL")) return "JULY 2026";
+      if (mo.includes("AUG")) return "AUGUST 2026";
+      if (mo.includes("SEP")) return "SEPTEMBER 2026";
+      if (mo.includes("OCT")) return "OCTOBER 2026";
+      if (mo.includes("NOV")) return "NOVEMBER 2026";
+      if (mo.includes("DEC")) return "DECEMBER 2026";
+      return mo;
+    }
+
+    function processRawData(res) {
+      if (!res || !res.data || res.data.length === 0) {
+        document.getElementById("syncTime").innerHTML = `<i class="fa-solid fa-triangle-exclamation text-rose-400 mr-1"></i> No Data`;
+        return;
+      }
+
+      masterAgencyList = res.registry || [];
+      document.getElementById("trkTotal").innerText = masterAgencyList.length;
+
+      normalizedDataset = res.data.map(row => {
+        const getNum = (key) => Number(row[key]) || 0;
+        row["Agency Name"] = String(row["Agency Name"] || "").trim();
+
+        const recyclable = getNum("Segregated Plastic (Kg)") + getNum("E-Waste (Kg)") + getNum("Polyethylene Sheet (Kg)") + getNum("Glass Waste (Kg)") + getNum("Cloth Waste (Kg)") + getNum("Vehicle Tyre (Kg)") + getNum("Medicine Strip (Kg)") + getNum("Recyclable Mix (Kg)") + getNum("Mixed Soft Plastic (Kg)");
+        const nonRecyclable = getNum("Shredded Plastic (Kg)") + getNum("Reject Plastic (Kg)") + getNum("MLP Mix (Kg)") + getNum("Chappal, Bag, Thermocol (Kg)");
+        const componentSum = recyclable + nonRecyclable;
+        const masterTotal = getNum("TOTAL QTY (Kg)");
+
+        return {
+          ...row,
+          "cleanDistrict": cleanDistrict(row["District"]),
+          "cleanMonth": cleanMonth(row["Month"]),
+          "cleanType": cleanLsgiType(row["Type of LSGI"]),
+          "calcRecyclable": recyclable,
+          "calcNonRecyclable": nonRecyclable,
+          "calcTotal": masterTotal > componentSum ? masterTotal : componentSum
+        };
+      });
+
+      document.getElementById("syncTime").innerHTML = `<i class="fa-solid fa-circle-check text-emerald-400 mr-1"></i> Live`;
+      populateDropdowns();
+      applyFilters();
+    }
+
+    function populateDropdowns() {
+      const chronologicalMonths = [
+        "JANUARY 2026", "FEBRUARY 2026", "MARCH 2026", "APRIL 2026",
+        "MAY 2026", "JUNE 2026", "JULY 2026", "AUGUST 2026",
+        "SEPTEMBER 2026", "OCTOBER 2026", "NOVEMBER 2026", "DECEMBER 2026"
+      ];
+
+      const keralaDistricts = [
+        "Thiruvananthapuram", "Kollam", "Pathanamthitta", "Alappuzha", 
+        "Kottayam", "Idukki", "Ernakulam", "Thrissur", "Palakkad", 
+        "Malappuram", "Kozhikode", "Wayanad", "Kannur", "Kasaragod"
+      ];
+
+      const fill = (id, key, defaultLabel, customList = null) => {
+        const select = document.getElementById(id);
+        const current = select.value;
+        let items = customList ? customList : [...new Set(normalizedDataset.map(d => d[key]).filter(Boolean))].sort();
+        
+        select.innerHTML = `<option value="ALL">${defaultLabel}</option>`;
+        items.forEach(val => select.innerHTML += `<option value="${val}">${val}</option>`);
+        select.value = (current === "ALL" || items.includes(current)) ? current : "ALL";
+      };
+
+      fill("filterAgency", "Agency Name", "All Agencies", masterAgencyList.sort());
+      fill("filterDistrict", "cleanDistrict", "All 14 Districts", keralaDistricts);
+      fill("filterMonth", "cleanMonth", "All 2026 Months", chronologicalMonths);
+      fill("filterType", "cleanType", "All Types");
+
+      const trkSelect = document.getElementById("trackerMonth");
+      trkSelect.innerHTML = `<option value="">Select Month...</option>`;
+      chronologicalMonths.forEach(m => trkSelect.innerHTML += `<option value="${m}">${m}</option>`);
+    }
+
+    function updateTracker() {
+      const month = document.getElementById("trackerMonth").value;
+      if (!month) {
+        document.getElementById("trkSub").innerText = "0";
+        document.getElementById("trkPend").innerText = "0";
+        trackerSubList = []; trackerPendList = [];
+        return;
+      }
+
+      const submittedSet = new Set();
+      normalizedDataset.forEach(r => {
+        if (r.cleanMonth === month) {
+           submittedSet.add(String(r["Agency Name"]).toLowerCase().trim());
+        }
+      });
+      
+      trackerSubList = [];
+      trackerPendList = [];
+
+      masterAgencyList.forEach(masterName => {
+         const mNameLower = String(masterName).toLowerCase().trim();
+         let found = false;
+         for (let subName of submittedSet) {
+            if (subName === mNameLower || mNameLower.includes(subName) || subName.includes(mNameLower)) {
+               found = true;
+               break;
+            }
+         }
+         if (found) trackerSubList.push(masterName);
+         else trackerPendList.push(masterName);
+      });
+      
+      trackerSubList.sort();
+      trackerPendList.sort();
+      
+      document.getElementById("trkTotal").innerText = masterAgencyList.length;
+      document.getElementById("trkSub").innerText = trackerSubList.length;
+      document.getElementById("trkPend").innerText = trackerPendList.length;
+    }
+
+    function viewTrackerDetails(type) {
+      let list = [];
+      let title = "";
+      let colorClass = "";
+      
+      if (type === 'submitted') {
+        list = trackerSubList;
+        title = "Agencies Submitted";
+        colorClass = "text-emerald-400";
+      } else if (type === 'pending') {
+        list = trackerPendList;
+        title = "Pending Agencies";
+        colorClass = "text-rose-400";
+      } else {
+        list = masterAgencyList.sort();
+        title = "Total Empanelled Agencies";
+        colorClass = "text-sky-400";
+      }
+      
+      let html = list.map((a, i) => `<div class='text-left py-3 border-b border-white/5 text-sm text-slate-300 font-medium tracking-wide'>
+        <span class='${colorClass} w-6 inline-block font-mono text-xs'>${i+1}.</span> ${a}
+      </div>`).join('');
+      
+      if(list.length === 0) html = "<p class='text-slate-500 py-6 text-center italic'>No agencies found for this category.</p>";
+      showListModal(title, html);
+    }
+
+    function applyFilters() {
+      requestAnimationFrame(() => {
+        const a = document.getElementById("filterAgency").value;
+        const d = document.getElementById("filterDistrict").value;
+        const m = document.getElementById("filterMonth").value;
+        const t = document.getElementById("filterType").value;
+
+        currentFilteredData = normalizedDataset.filter(row => {
+          return (a === "ALL" || row["Agency Name"] === a) &&
+                 (d === "ALL" || row["cleanDistrict"] === d) &&
+                 (m === "ALL" || row["cleanMonth"] === m) &&
+                 (t === "ALL" || row["cleanType"] === t);
+        });
+
+        updateKPIs(currentFilteredData);
+        updateCharts(currentFilteredData);
+        updateTable();
+      });
+    }
+
+    function updateKPIs(data) {
+      let totQty = 0, totRec = 0, totNonRec = 0;
+      data.forEach(r => { totRec += r.calcRecyclable; totNonRec += r.calcNonRecyclable; totQty += r.calcTotal; });
+
+      document.getElementById("kpiTotalQty").innerHTML = `${(totQty / 1000).toFixed(1)} <span class="text-lg text-slate-500 font-normal">MT</span>`;
+      document.getElementById("kpiTotalKg").innerText = Math.round(totQty).toLocaleString() + " Kg";
+      document.getElementById("kpiRecyclables").innerHTML = `${(totRec / 1000).toFixed(1)} <span class="text-lg text-slate-500 font-normal">MT</span>`;
+      document.getElementById("kpiRecyclablesKg").innerText = Math.round(totRec).toLocaleString() + " Kg";
+      document.getElementById("kpiRejects").innerHTML = `${(totNonRec / 1000).toFixed(1)} <span class="text-lg text-slate-500 font-normal">MT</span>`;
+      document.getElementById("kpiRejectsKg").innerText = Math.round(totNonRec).toLocaleString() + " Kg";
+    }
+
+    function updateCharts(data) {
+      const agencyMap = {}, districtMap = {};
+      let tRec = 0, tNon = 0;
+
+      data.forEach(r => {
+        agencyMap[r["Agency Name"]] = (agencyMap[r["Agency Name"]] || 0) + r.calcTotal;
+        districtMap[r.cleanDistrict] = (districtMap[r.cleanDistrict] || 0) + r.calcTotal;
+        tRec += r.calcRecyclable;
+        tNon += r.calcNonRecyclable;
+      });
+
+      const topAgencies = Object.entries(agencyMap).sort((a,b) => b[1] - a[1]).slice(0, 10);
+      const ctxAgency = document.getElementById("agencyChart").getContext("2d");
+      let gradA = ctxAgency.createLinearGradient(0, 0, 0, 400);
+      gradA.addColorStop(0, 'rgba(56, 189, 248, 0.8)'); gradA.addColorStop(1, 'rgba(99, 102, 241, 0.1)');
+
+      if (agencyChartInstance) agencyChartInstance.destroy();
+      agencyChartInstance = new Chart(ctxAgency, {
+        type: "bar",
+        data: {
+          labels: topAgencies.map(x => x[0].length > 18 ? x[0].substring(0, 15) + '...' : x[0]),
+          datasets: [{ data: topAgencies.map(x => (x[1] / 1000).toFixed(2)), backgroundColor: gradA, borderRadius: 6, borderWidth: 1, borderColor: 'rgba(56, 189, 248, 0.5)' }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, scales: { x: { grid: { display: false } }, y: { grid: { color: 'rgba(255,255,255,0.05)' } } }, plugins: { legend: { display: false } } }
+      });
+
+      const keralaDistrictsOrder = ["Thiruvananthapuram", "Kollam", "Pathanamthitta", "Alappuzha", "Kottayam", "Idukki", "Ernakulam", "Thrissur", "Palakkad", "Malappuram", "Kozhikode", "Wayanad", "Kannur", "Kasaragod"];
+      const distEntries = Object.entries(districtMap).sort((a, b) => keralaDistrictsOrder.indexOf(a[0]) - keralaDistrictsOrder.indexOf(b[0]));
+
+      const ctxDist = document.getElementById("districtChart").getContext("2d");
+      let gradD = ctxDist.createLinearGradient(0, 0, 0, 400);
+      gradD.addColorStop(0, 'rgba(168, 85, 247, 0.8)'); gradD.addColorStop(1, 'rgba(99, 102, 241, 0.1)');
+
+      if (districtChartInstance) districtChartInstance.destroy();
+      districtChartInstance = new Chart(ctxDist, {
+        type: "bar",
+        data: {
+          labels: distEntries.map(x => x[0]),
+          datasets: [{ data: distEntries.map(x => (x[1] / 1000).toFixed(2)), backgroundColor: gradD, borderRadius: 6, borderWidth: 1, borderColor: 'rgba(168, 85, 247, 0.5)' }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, scales: { x: { grid: { display: false } }, y: { grid: { color: 'rgba(255,255,255,0.05)' } } }, plugins: { legend: { display: false } } }
+      });
+
+      if (compChartInstance) compChartInstance.destroy();
+      compChartInstance = new Chart(document.getElementById("compChart").getContext("2d"), {
+        type: "doughnut",
+        data: {
+          labels: ["Recyclables", "Non-Recyclables"],
+          datasets: [{ data: [tRec, tNon], backgroundColor: ['rgba(52, 211, 153, 0.8)', 'rgba(244, 63, 94, 0.8)'], borderColor: '#040814', borderWidth: 2 }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: { position: 'right', labels: { color: '#cbd5e1' } } } }
+      });
+    }
+
+    function changeTableLimit() {
+      const val = document.getElementById("tableLimit").value;
+      tableDisplayLimit = val === "ALL" ? currentFilteredData.length : parseInt(val, 10);
+      updateTable();
+    }
+
+    function updateTable() {
+      const tbody = document.getElementById("tableBody");
+      const recordCountEl = document.getElementById("recordCount");
+      const displayData = currentFilteredData.slice(0, tableDisplayLimit);
+      const htmlFragments = [];
+      
+      displayData.forEach((r, idx) => {
+        htmlFragments.push(`
+          <tr class="hover:bg-white/5 transition-colors border-b border-white/5 group">
+            <td class="p-5 text-slate-500 font-mono text-[11px] group-hover:text-indigo-300 transition-colors">${idx + 1}</td>
+            <td class="p-5 font-medium text-slate-200 tracking-wide">${r["Agency Name"]}</td>
+            <td class="p-5"><span class="px-2.5 py-1 bg-white/5 border border-white/10 rounded text-indigo-300 text-[9px] uppercase font-bold tracking-widest">${r.cleanMonth}</span></td>
+            <td class="p-5 text-slate-400 font-medium">${r.cleanDistrict}</td>
+            <td class="p-5 text-slate-400">${r["Local Body / Institution"]} <span class="text-[9px] text-slate-500 ml-1 uppercase tracking-widest bg-black/20 px-1.5 py-0.5 rounded">(${r.cleanType})</span></td>
+            <td class="p-5 text-right font-mono text-emerald-400">${Math.round(r.calcRecyclable).toLocaleString()}</td>
+            <td class="p-5 text-right font-mono text-rose-400">${Math.round(r.calcNonRecyclable).toLocaleString()}</td>
+            <td class="p-5 text-right font-bold font-mono text-sky-400 bg-sky-500/5 group-hover:bg-sky-500/10 transition-colors">${Math.round(r.calcTotal).toLocaleString()}</td>
+          </tr>
+        `);
+      });
+
+      tbody.innerHTML = htmlFragments.join('');
+      recordCountEl.innerHTML = currentFilteredData.length > tableDisplayLimit 
+        ? `${tableDisplayLimit} <span class="text-slate-500 font-normal lowercase">of</span> ${currentFilteredData.length.toLocaleString()}`
+        : currentFilteredData.length.toLocaleString();
+    }
+  </script>
+</body>
+</html>
