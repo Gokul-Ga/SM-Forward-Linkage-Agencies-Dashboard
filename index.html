@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Forward Linkage Analytics | Suchitwa Mission</title>
+  <title>Forward Linkage | Agencies Dashboard | Suchitwa Mission</title>
+  <link rel="icon" type="image/png" href="https://suchitwamission.org/public/img/logo/fav.svg" sizes="32x32"> 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
   <script src="https://cdn.tailwindcss.com"></script>
@@ -333,7 +334,8 @@
       document.getElementById("loadingOverlay").classList.remove("hidden");
       
       try {
-        const response = await fetch(API_URL + "?format=json");
+        // ADDED: { redirect: "follow" } to ensure Google's automatic redirects don't block the data fetch
+        const response = await fetch(API_URL + "?format=json", { redirect: "follow" });
         if (!response.ok) throw new Error("Network response was not ok");
         
         const data = await response.json();
@@ -361,7 +363,8 @@
 
       try {
         // Appending action=refresh triggers the heavy backend sync
-        const response = await fetch(API_URL + "?format=json&action=refresh");
+        // ADDED: { redirect: "follow" } for CORS compatibility
+        const response = await fetch(API_URL + "?format=json&action=refresh", { redirect: "follow" });
         if (!response.ok) throw new Error("Network response was not ok");
         
         const data = await response.json();
