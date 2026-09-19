@@ -194,8 +194,9 @@
       <div class="glass-panel p-6 rounded-2xl flex flex-col justify-between">
         <div class="flex flex-wrap justify-between items-center gap-4 mb-5 border-b border-white/10 pb-4">
           <div>
-            <h4 class="text-sm font-bold text-indigo-300 uppercase tracking-widest flex items-center gap-2"><i class="fa-solid fa-radar"></i> Submission Tracker</h4>
-            <p class="text-xs text-slate-400 mt-1">Monitor agency reporting compliance by month.</p>
+            <!-- UPDATED TRACKER TITLE -->
+            <h4 class="text-sm font-bold text-indigo-300 uppercase tracking-widest flex items-center gap-2"><i class="fa-solid fa-radar"></i> Active Agency Tracker</h4>
+            <p class="text-xs text-slate-400 mt-1">Monitor active agency reporting compliance by month.</p>
           </div>
           <div>
             <select id="trackerMonth" onchange="updateTracker()" class="glass-input rounded-xl text-xs px-3 py-2 outline-none cursor-pointer">
@@ -206,15 +207,16 @@
         
         <div class="grid grid-cols-3 gap-3 text-center">
           <div onclick="viewTrackerDetails('total')" class="bg-black/20 p-4 rounded-xl border border-white/5 flex flex-col justify-center cursor-pointer hover:bg-white/5 transition-colors">
-            <p class="text-[9px] uppercase tracking-widest text-slate-400 mb-1">Total Agencies <i class="fa-solid fa-arrow-up-right-from-square ml-1 text-[8px]"></i></p>
+            <!-- UPDATED LABELS -->
+            <p class="text-[9px] uppercase tracking-widest text-slate-400 mb-1">Active Agencies <i class="fa-solid fa-arrow-up-right-from-square ml-1 text-[8px]"></i></p>
             <p class="text-2xl font-light text-white" id="trkTotal">0</p>
           </div>
           <div onclick="viewTrackerDetails('submitted')" class="bg-emerald-900/20 p-4 rounded-xl border border-emerald-500/20 cursor-pointer hover:bg-emerald-900/40 transition-colors flex flex-col justify-center">
-            <p class="text-[9px] uppercase tracking-widest text-emerald-400 mb-1">Submitted <i class="fa-solid fa-arrow-up-right-from-square ml-1 text-[8px]"></i></p>
+            <p class="text-[9px] uppercase tracking-widest text-emerald-400 mb-1">Active Submitted <i class="fa-solid fa-arrow-up-right-from-square ml-1 text-[8px]"></i></p>
             <p class="text-2xl font-bold text-emerald-300" id="trkSub">0</p>
           </div>
           <div onclick="viewTrackerDetails('pending')" class="bg-rose-900/20 p-4 rounded-xl border border-rose-500/20 cursor-pointer hover:bg-rose-900/40 transition-colors flex flex-col justify-center">
-            <p class="text-[9px] uppercase tracking-widest text-rose-400 mb-1">Pending <i class="fa-solid fa-arrow-up-right-from-square ml-1 text-[8px]"></i></p>
+            <p class="text-[9px] uppercase tracking-widest text-rose-400 mb-1">Active Pending <i class="fa-solid fa-arrow-up-right-from-square ml-1 text-[8px]"></i></p>
             <p class="text-2xl font-bold text-rose-300" id="trkPend">0</p>
           </div>
         </div>
@@ -292,7 +294,10 @@
     let normalizedDataset = [];
     let currentFilteredData = [];
     let tableDisplayLimit = 10;
+    
+    // NEW GLOBALS FOR EMPANELMENT FILTERING
     let masterAgencyList = []; 
+    let windowDropdownMode = "ALL";
     
     let agencyChartInstance = null;
     let districtChartInstance = null;
@@ -329,12 +334,10 @@
       setTimeout(() => document.getElementById(modalId).classList.add("hidden"), 200);
     }
 
-    // ----- GITHUB PAGES FETCH LOGIC -----
     window.onload = async function() {
       document.getElementById("loadingOverlay").classList.remove("hidden");
       
       try {
-        // ADDED: { redirect: "follow" } to ensure Google's automatic redirects don't block the data fetch
         const response = await fetch(API_URL + "?format=json", { redirect: "follow" });
         if (!response.ok) throw new Error("Network response was not ok");
         
@@ -362,8 +365,6 @@
       loader.classList.remove("hidden", "opacity-0");
 
       try {
-        // Appending action=refresh triggers the heavy backend sync
-        // ADDED: { redirect: "follow" } for CORS compatibility
         const response = await fetch(API_URL + "?format=json&action=refresh", { redirect: "follow" });
         if (!response.ok) throw new Error("Network response was not ok");
         
@@ -436,8 +437,9 @@
         return;
       }
 
+      // Read new registry objects and admin dropdown preference
       masterAgencyList = res.registry || [];
-      document.getElementById("trkTotal").innerText = masterAgencyList.length;
+      window.dropdownMode = res.dropdownMode || "ALL";
 
       normalizedDataset = res.data.map(row => {
         const getNum = (key) => Number(row[key]) || 0;
@@ -462,6 +464,7 @@
       document.getElementById("syncTime").innerHTML = `<i class="fa-solid fa-circle-check text-emerald-400 mr-1"></i> Live`;
       populateDropdowns();
       applyFilters();
+      updateTracker(); // Renders the initial "SELECT MONTH" view
     }
 
     function populateDropdowns() {
@@ -487,7 +490,14 @@
         select.value = (current === "ALL" || items.includes(current)) ? current : "ALL";
       };
 
-      fill("filterAgency", "Agency Name", "All Agencies", masterAgencyList.sort());
+      // Filter Agency Dropdown based on Admin Preference
+      let activeAgencies = masterAgencyList;
+      if (window.dropdownMode === "ACTIVE_ONLY") {
+        activeAgencies = masterAgencyList.filter(a => a.status !== "Inactive");
+      }
+      let agencyNamesForDropdown = activeAgencies.map(a => a.name).sort();
+
+      fill("filterAgency", "Agency Name", "All Agencies", agencyNamesForDropdown);
       fill("filterDistrict", "cleanDistrict", "All 14 Districts", keralaDistricts);
       fill("filterMonth", "cleanMonth", "All 2026 Months", chronologicalMonths);
       fill("filterType", "cleanType", "All Types");
@@ -499,10 +509,14 @@
 
     function updateTracker() {
       const month = document.getElementById("trackerMonth").value;
+      const activeCount = masterAgencyList.filter(a => a.status !== "Inactive").length;
+
       if (!month) {
-        document.getElementById("trkSub").innerText = "0";
-        document.getElementById("trkPend").innerText = "0";
-        trackerSubList = []; trackerPendList = [];
+        document.getElementById("trkTotal").innerText = activeCount;
+        document.getElementById("trkSub").innerHTML = `<span class="text-[11px] font-mono tracking-widest text-emerald-500/70">SELECT MONTH</span>`;
+        document.getElementById("trkPend").innerHTML = `<span class="text-[11px] font-mono tracking-widest text-rose-500/70">SELECT MONTH</span>`;
+        trackerSubList = []; 
+        trackerPendList = [];
         return;
       }
 
@@ -516,7 +530,10 @@
       trackerSubList = [];
       trackerPendList = [];
 
-      masterAgencyList.forEach(masterName => {
+      // CRITICAL UPDATE: Tracker ONLY evaluates active agencies
+      const activeAgencyNames = masterAgencyList.filter(a => a.status !== "Inactive").map(a => a.name);
+
+      activeAgencyNames.forEach(masterName => {
          const mNameLower = String(masterName).toLowerCase().trim();
          let found = false;
          for (let subName of submittedSet) {
@@ -532,7 +549,7 @@
       trackerSubList.sort();
       trackerPendList.sort();
       
-      document.getElementById("trkTotal").innerText = masterAgencyList.length;
+      document.getElementById("trkTotal").innerText = activeAgencyNames.length;
       document.getElementById("trkSub").innerText = trackerSubList.length;
       document.getElementById("trkPend").innerText = trackerPendList.length;
     }
@@ -544,15 +561,15 @@
       
       if (type === 'submitted') {
         list = trackerSubList;
-        title = "Agencies Submitted";
+        title = "Active Agencies Submitted";
         colorClass = "text-emerald-400";
       } else if (type === 'pending') {
         list = trackerPendList;
-        title = "Pending Agencies";
+        title = "Active Agencies Pending";
         colorClass = "text-rose-400";
       } else {
-        list = masterAgencyList.sort();
-        title = "Total Empanelled Agencies";
+        list = masterAgencyList.filter(a => a.status !== "Inactive").map(a => a.name).sort();
+        title = "Total Active Empanelled Agencies";
         colorClass = "text-sky-400";
       }
       
